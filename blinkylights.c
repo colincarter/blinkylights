@@ -11,10 +11,10 @@
 
 typedef enum {FALSE=0, TRUE} bool_t;
 
-#define LED0_PIN	PB0
-#define BUTTON_PIN	PB3
+#define LED0_PIN  PB0
+#define BUTTON_PIN  PB3
 #ifdef DEBUG
-#define DEBUG_LED	PB4
+#define DEBUG_LED PB4
 #endif
 
 #define BUTTON_THRESHOLD (3)
@@ -31,16 +31,16 @@ bool_t check_button(void);
 
 // Sine table generated from http://www.daycounter.com/Calculators/Sine-Generator-Calculator2.phtml
 const uint8_t PROGMEM sine_table[] = {
-	1,1,2,3,5,6,8,10,12,15,17,20,23,26,29,33,36,40,44,
-	48,53,57,61,66,71,76,81,86,91,96,101,106,112,117,
-	122,128,133,138,143,149,154,159,164,169,174,179,184,
-	189,194,198,202,207,211,215,219,222,226,229,232,235,
-	238,240,243,245,247,249,250,252,253,254,254,255,255,
-	255,255,254,254,253,252,250,249,247,245,243,240,238,
-	235,232,229,226,222,219,215,211,207,202,198,194,189,
-	184,179,174,169,164,159,154,149,143,138,133,128,122,
-	117,112,106,101,96,91,86,81,76,71,66,61,57,53,48,44,
-	40,36,33,29,26,23,20,17,15,12,10,8,6,5,3,2,1,1,0
+  1,1,2,3,5,6,8,10,12,15,17,20,23,26,29,33,36,40,44,
+  48,53,57,61,66,71,76,81,86,91,96,101,106,112,117,
+  122,128,133,138,143,149,154,159,164,169,174,179,184,
+  189,194,198,202,207,211,215,219,222,226,229,232,235,
+  238,240,243,245,247,249,250,252,253,254,254,255,255,
+  255,255,254,254,253,252,250,249,247,245,243,240,238,
+  235,232,229,226,222,219,215,211,207,202,198,194,189,
+  184,179,174,169,164,159,154,149,143,138,133,128,122,
+  117,112,106,101,96,91,86,81,76,71,66,61,57,53,48,44,
+  40,36,33,29,26,23,20,17,15,12,10,8,6,5,3,2,1,1,0
 };
 
 volatile uint8_t button_pressed_level = 0;
@@ -48,177 +48,177 @@ volatile bool_t button_pressed = FALSE;
 
 int main(void)
 {
-	init();
+  init();
 
-	while(1)
-	{
-		solid();
-		fade();
-		blink();
-	}
+  while(1)
+  {
+    solid();
+    fade();
+    blink();
+  }
 
-	return 0;
+  return 0;
 }
 
 void init(void)
 {
-	cli();
+  cli();
 
-	DDRB = 0;
-	DDRB = _BV(LED0_PIN);
+  DDRB = 0;
+  DDRB = _BV(LED0_PIN);
 
-	// Enable pull-up resistors on input ports
-	PORTB = _BV(BUTTON_PIN) |
-			_BV(PB1) |
-			_BV(PB2) |
-			_BV(PB5);
+  // Enable pull-up resistors on input ports
+  PORTB = _BV(BUTTON_PIN) |
+      _BV(PB1) |
+      _BV(PB2) |
+      _BV(PB5);
 
-	// Pin change interrupt
-	GIMSK |= _BV(PCIE);
-	PCMSK |= _BV(BUTTON_PIN);
-	GIFR |= _BV(PCIF);
+  // Pin change interrupt
+  GIMSK |= _BV(PCIE);
+  PCMSK |= _BV(BUTTON_PIN);
+  GIFR |= _BV(PCIF);
 
-	sei();
+  sei();
 }
 
 void solid(void)
 {
-	while(1)
-	{
-		PORTB |= _BV(LED0_PIN);
+  while(1)
+  {
+    PORTB |= _BV(LED0_PIN);
 
-		sleep_mcu();
+    sleep_mcu();
 
-		if(check_button())
-		{
-			break;
-		}
+    if(check_button())
+    {
+      break;
+    }
 
-	}
+  }
 }
 
 void fade(void)
 {
-	const register uint8_t *cstp = sine_table;
-	register uint8_t cstv;
+  const register uint8_t *cstp = sine_table;
+  register uint8_t cstv;
 
-	OCR0A = 0;
+  OCR0A = 0;
 
-	pwm_on();
+  pwm_on();
 
-	while(1)
-	{
-		if(check_button())
-		{
-			break;
-		}
+  while(1)
+  {
+    if(check_button())
+    {
+      break;
+    }
 
-		cstv = pgm_read_byte_near(cstp);
+    cstv = pgm_read_byte_near(cstp);
 
-		if(cstv == 0)
-		{
-			cstp = sine_table;
-			continue;
-		}
+    if(cstv == 0)
+    {
+      cstp = sine_table;
+      continue;
+    }
 
-		OCR0A = cstv;
+    OCR0A = cstv;
 
-		wait_for_watchdog(WDTO_30MS);
+    wait_for_watchdog(WDTO_30MS);
 
-		cstp++;
-	}
+    cstp++;
+  }
 
-	pwm_off();
+  pwm_off();
 }
 
 void blink(void)
 {
-	uint8_t level = 0xFF;
+  uint8_t level = 0xFF;
 
-	pwm_on();
+  pwm_on();
 
-	while(1)
-	{
-		if(check_button())
-		{
-			break;
-		}
+  while(1)
+  {
+    if(check_button())
+    {
+      break;
+    }
 
-		OCR0A = level;
+    OCR0A = level;
 
-		wait_for_watchdog(WDTO_500MS);
+    wait_for_watchdog(WDTO_500MS);
 
-		level ^= 0xFF;
-	}
+    level ^= 0xFF;
+  }
 
-	pwm_off();
+  pwm_off();
 }
 
 void pwm_on(void)
 {
-	TCCR0A |= ( _BV(WGM00) | _BV(WGM01) | _BV(COM0A1) );
-	TCCR0B |= ( _BV(CS01) | _BV(CS00) );
+  TCCR0A |= ( _BV(WGM00) | _BV(WGM01) | _BV(COM0A1) );
+  TCCR0B |= ( _BV(CS01) | _BV(CS00) );
 }
 
 void pwm_off(void)
 {
-	TCCR0A = 0;
-	TCCR0B = 0;
+  TCCR0A = 0;
+  TCCR0B = 0;
 }
 
 void wait_for_watchdog(uint8_t period)
 {
-	cli();
+  cli();
 
-	wdt_reset();
+  wdt_reset();
 
-	WDTCR = (_BV(WDTIF) | _BV(WDTIE) | period);
+  WDTCR = (_BV(WDTIF) | _BV(WDTIE) | period);
 
-	sei();
+  sei();
 
-	sleep_mcu();
+  sleep_mcu();
 
-	// Disable watchdog interrupt
-	WDTCR &= ~_BV(WDTIE);
+  // Disable watchdog interrupt
+  WDTCR &= ~_BV(WDTIE);
 }
 
 void sleep_mcu(void)
 {
-	set_sleep_mode(SLEEP_MODE_IDLE);
-	sleep_enable();
-	sleep_mode();
+  set_sleep_mode(SLEEP_MODE_IDLE);
+  sleep_enable();
+  sleep_mode();
 
-	// mcu woken up and control returned here
+  // mcu woken up and control returned here
 
-	sleep_disable();
+  sleep_disable();
 }
 
 bool_t check_button(void)
 {
-	if(button_pressed)
-	{
-		button_pressed = FALSE;
-		return TRUE;
-	}
+  if(button_pressed)
+  {
+    button_pressed = FALSE;
+    return TRUE;
+  }
 
-	return FALSE;
+  return FALSE;
 }
 
 ISR(PCINT0_vect)
 {
-	if(bit_is_clear(PINB, BUTTON_PIN))
-	{
-		_delay_ms(20);
+  if(bit_is_clear(PINB, BUTTON_PIN))
+  {
+    _delay_ms(20);
 
-		if(bit_is_clear(PINB, BUTTON_PIN))
-		{
-			button_pressed = TRUE;
-		}
-		else
-		{
-			button_pressed = FALSE;
-		}
-	}
+    if(bit_is_clear(PINB, BUTTON_PIN))
+    {
+      button_pressed = TRUE;
+    }
+    else
+    {
+      button_pressed = FALSE;
+    }
+  }
 }
 
 
