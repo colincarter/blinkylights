@@ -3,18 +3,31 @@
 #include <avr/interrupt.h>
 #include <avr/wdt.h>
 #include <avr/sleep.h>
+#include <avr/power.h>
 #include <util/delay.h>
 #include <stdint.h>
+
+#define DEBUG
 
 typedef enum {FALSE=0, TRUE} bool_t;
 
 #define LED0_PIN	PB0
-#define LED1_PIN	PB1
-#define BUTTON_PIN	PB2
+#define BUTTON_PIN	PB3
+#ifdef DEBUG
+#define DEBUG_LED	PB4
+#endif
 
-bool_t button_pressed(void);
+#define BUTTON_THRESHOLD (3)
+
+void init(void);
 void solid(void);
 void fade(void);
+void blink(void);
+void wait_for_watchdog(uint8_t period);
+void sleep_mcu(void);
+void pwm_on(void);
+void pwm_off(void);
+bool_t check_button(void);
 
 // Sine table generated from http://www.daycounter.com/Calculators/Sine-Generator-Calculator2.phtml
 const uint8_t PROGMEM sine_table[] = {
@@ -30,42 +43,58 @@ const uint8_t PROGMEM sine_table[] = {
 	40,36,33,29,26,23,20,17,15,12,10,8,6,5,3,2,1,1,0
 };
 
+volatile uint8_t button_pressed_level = 0;
+volatile bool_t button_pressed = FALSE;
+
 int main(void)
 {
-	// Everything output
-	DDRB = 0xFF;
-
-//	DDRB &= ~_BV(BUTTON_PIN);
-
-	// Pull up resistor on button pin
-//	PORTB |= _BV(BUTTON_PIN);
-
-	// Set Fast PWM mode
-	TCCR0A |= ( _BV(WGM00) | _BV(WGM01) );
-	TCCR0B |= ( _BV(CS01) | _BV(CS00) );
-
-	// Clear OC0A on Compare Match, set OC0A at TOP
-	// Clear OC0B on Compare Match, set OC0B at TOP
-	TCCR0A |= ( _BV(COM0A1) | _BV(COM0B1) );
-
-	OCR0A = 0;
-	OCR0B = 0;
+	init();
 
 	while(1)
 	{
 		solid();
 		fade();
+		blink();
 	}
 
 	return 0;
 }
 
+void init(void)
+{
+	cli();
+
+	DDRB = 0;
+	DDRB = _BV(LED0_PIN);
+
+	// Enable pull-up resistors on input ports
+	PORTB = _BV(BUTTON_PIN) |
+			_BV(PB1) |
+			_BV(PB2) |
+			_BV(PB5);
+
+	// Pin change interrupt
+	GIMSK |= _BV(PCIE);
+	PCMSK |= _BV(BUTTON_PIN);
+	GIFR |= _BV(PCIF);
+
+	sei();
+}
+
 void solid(void)
 {
-	PORTB |= _BV(LED0_PIN);
+	while(1)
+	{
+		PORTB |= _BV(LED0_PIN);
 
-	while(!button_pressed())
-		;
+		sleep_mcu();
+
+		if(check_button())
+		{
+			break;
+		}
+
+	}
 }
 
 void fade(void)
@@ -73,9 +102,13 @@ void fade(void)
 	const register uint8_t *cstp = sine_table;
 	register uint8_t cstv;
 
+	OCR0A = 0;
+
+	pwm_on();
+
 	while(1)
 	{
-		if(button_pressed())
+		if(check_button())
 		{
 			break;
 		}
@@ -89,25 +122,105 @@ void fade(void)
 		}
 
 		OCR0A = cstv;
-		OCR0B = cstv;
 
-				// Need to sleep here
-		_delay_ms(50);
+		wait_for_watchdog(WDTO_30MS);
 
 		cstp++;
 	}
+
+	pwm_off();
 }
 
-bool_t button_pressed(void)
+void blink(void)
 {
-	if(bit_is_clear(PORTB, BUTTON_PIN))
+	uint8_t level = 0xFF;
+
+	pwm_on();
+
+	while(1)
 	{
-		_delay_ms(2);
-		if(bit_is_clear(PORTB, BUTTON_PIN))
-			return TRUE;
+		if(check_button())
+		{
+			break;
+		}
+
+		OCR0A = level;
+
+		wait_for_watchdog(WDTO_500MS);
+
+		level ^= 0xFF;
+	}
+
+	pwm_off();
+}
+
+void pwm_on(void)
+{
+	TCCR0A |= ( _BV(WGM00) | _BV(WGM01) | _BV(COM0A1) );
+	TCCR0B |= ( _BV(CS01) | _BV(CS00) );
+}
+
+void pwm_off(void)
+{
+	TCCR0A = 0;
+	TCCR0B = 0;
+}
+
+void wait_for_watchdog(uint8_t period)
+{
+	cli();
+
+	wdt_reset();
+
+	WDTCR = (_BV(WDTIF) | _BV(WDTIE) | period);
+
+	sei();
+
+	sleep_mcu();
+
+	// Disable watchdog interrupt
+	WDTCR &= ~_BV(WDTIE);
+}
+
+void sleep_mcu(void)
+{
+	set_sleep_mode(SLEEP_MODE_IDLE);
+	sleep_enable();
+	sleep_mode();
+
+	// mcu woken up and control returned here
+
+	sleep_disable();
+}
+
+bool_t check_button(void)
+{
+	if(button_pressed)
+	{
+		button_pressed = FALSE;
+		return TRUE;
 	}
 
 	return FALSE;
 }
 
+ISR(PCINT0_vect)
+{
+	if(bit_is_clear(PINB, BUTTON_PIN))
+	{
+		_delay_ms(20);
+
+		if(bit_is_clear(PINB, BUTTON_PIN))
+		{
+			button_pressed = TRUE;
+		}
+		else
+		{
+			button_pressed = FALSE;
+		}
+	}
+}
+
+
 EMPTY_INTERRUPT(WDT_vect);
+
