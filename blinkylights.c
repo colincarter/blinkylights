@@ -7,17 +7,10 @@
 #include <util/delay.h>
 #include <stdint.h>
 
-#define DEBUG
-
 typedef enum {FALSE=0, TRUE} bool_t;
 
 #define LED0_PIN  PB0
 #define BUTTON_PIN  PB3
-#ifdef DEBUG
-#define DEBUG_LED PB4
-#endif
-
-#define BUTTON_THRESHOLD (3)
 
 void init(void);
 void solid(void);
@@ -43,7 +36,6 @@ const uint8_t PROGMEM sine_table[] = {
   40,36,33,29,26,23,20,17,15,12,10,8,6,5,3,2,1,1,0
 };
 
-volatile uint8_t button_pressed_level = 0;
 volatile bool_t button_pressed = FALSE;
 
 int main(void)
