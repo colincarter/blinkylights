@@ -56,6 +56,15 @@ void init(void)
 {
   cli();
 
+  // Determine if the reset source was a brownout
+  if(bit_is_set(MCUSR, BORF))
+  {
+    // Don't do any more
+    while(1)
+    {
+    }
+  }
+
   DDRB = 0;
   DDRB = _BV(LED0_PIN);
 
