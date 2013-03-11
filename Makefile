@@ -1,80 +1,60 @@
-# Name:			Makefile
-# Author:		Jeff Keyzer
-# Copyright:	2011 Jeff Keyzer, MightyOhm Engineering
-#
-# This Makefile is derived from the template that comes with CrossPack for the Mac,
-# but with several improvements.
+TARGET = blinklights
 
-# Values you might need to change:
-# In particular, check that your programmer is configured correctly.
-#
-# PROGRAM		The name of the "main" program file, without any suffix.
-# OBJECTS		The object files created from your source files. This list is
-#                usually the same as the list of source files with suffix ".o".
-# DEVICE		The AVR device you are compiling for.
-# CLOCK			Target AVR clock rate in Hz (eg. 8000000)
-# PROGRAMMER	Programmer hardware used to flash program to target device.
-# PORT			The peripheral port on the host PC that the programmer is connected to.
-# LFUSE			Target device configuration fuses, low byte.
-# HFUSE			Targer device configuration fuses, high byte.
-# EFUSE			Target device configuration fuses (extended).
+# Target type
+MCU=attiny13
+PROGRAMMER=avrmkii
+F_CPU=1000000
 
-PROGRAM		= blinkylights
-OBJECTS		= blinkylights.o
-DEVICE		= attiny13
-CLOCK		= 1000000
-PROGRAMMER	= avrispmkII
-PORT		= usb
+SRC = blinkylights.c
 
-# Fuse configuration:
-# For a really nice guide to AVR fuses, see http://www.engbedded.com/fusecalc/
-# LFUSE: SUT0, CKSEL0 (Ext Xtal 8+Mhz, 0ms startup time)
-LFUSE		= 0x6A
-# HFUSE: SPIEN, BODLEVEL0 (Serial programming enabled, Brownout = 1.8V
-HFUSE		= 0xFD
+SRC += $(DRIVERS)
+OBJ = $(SRC:.c=.o)
+
+CC = avr-gcc
+
+# Compiler / Linker flags:
+CFLAGS = -mmcu=$(MCU) -Wall -Os -std=gnu99 -D F_CPU=$(F_CPU) -funsigned-char -funsigned-bitfields -fpack-struct -fshort-enums
+LDFLAGS = -mmcu=$(MCU) -Wl,-Map=$(TARGET).map
 
 
-# Tune the lines below only if you know what you are doing:
 
-AVRDUDE = avrdude -c $(PROGRAMMER) -P $(PORT) -p $(DEVICE)
-COMPILE = avr-gcc -g -Wall -Os -DF_CPU=$(CLOCK) -mmcu=$(DEVICE)
+###################################
+# Makerules:
 
-# Linker options
-LDFLAGS	= -Wl,-Map=$(PROGRAM).map -Wl,--cref
 
-# Add size command so we can see how much space we are using on the target device.
-SIZE	= avr-size -C --mcu=$(DEVICE)
+.PHONY: compile flash clean
 
-# symbolic targets:
-all:	$(PROGRAM).hex
-	$(SIZE) $(PROGRAM).elf
+compile: $(TARGET).hex $(TARGET).eep $(TARGET).lss
 
-$(PROGRAM):	all
+flash: compile
+	avrdude -c $(PROGRAMMER) -P usb -p $(MCU) -U flash:w:$(TARGET).hex
+	# sleep 2
+	# avrdude -c $(PROGRAMMER) -P usb -p $(MCU) -U eeprom:w:$(TARGET).eep
 
-flash: all
-	$(AVRDUDE) -U flash:w:$(PROGRAM).hex:i
-
-fuse:
-	$(AVRDUDE) -U hfuse:w:$(HFUSE):m -U lfuse:w:$(LFUSE):m
-
-# Xcode uses the Makefile targets "", "clean" and "install"
-install: flash
 clean:
-	rm -f $(PROGRAM).hex $(PROGRAM).elf $(OBJECTS) $(PROGRAM).lst $(PROGRAM).map
+	rm -f $(OBJ) $(TARGET).{elf,hex,lss,map,eep}
 
-# file targets:
+###################################
+# Psudorules:
+
+%.eep: %.hex
+	@echo "  OBJCOPY    ${<}"
+	@avr-objcopy -j .eeprom --set-section-flags=.eeprom="alloc,load" --change-section-lma .eeprom=0 --no-change-warnings -O ihex $< $@
+
 %.hex: %.elf
-	avr-objcopy -j .text -j .data -O ihex $< $@
+	@echo "  OBJCOPY    ${<}"
+	@avr-objcopy -O ihex -R .eeprom -R .fuse -R .lock -R .signature $< $@
 
-%.elf: %.o
-	$(COMPILE) -o $@ $< $(LDFLAGS)
+%.lss: %.elf
+	@echo "  OBJDUMP    ${<}"
+	@avr-objdump -h -S $< > $@
+	@echo "  SIZE    ${<}"
+	@avr-size -C --mcu=$(MCU) $(TARGET).elf
 
-%.o: %.c
-	$(COMPILE) -c $< -o $@
+%.elf: $(OBJ)
+	@echo "  LN    ${@}"
+	@avr-gcc $^ $(LDFLAGS) -o $@
 
-# Targets for code debugging and analysis:
-disasm:	$(PROGRAM).elf
-	avr-objdump -h -S $(PROGRAM).elf > $(PROGRAM).lst
-
-# Tell make that these targets don't correspond to actual files
-.PHONY :	all $(PROGRAM) flash fuse install clean disasm
+%.o : %.c
+	@echo "  CC    ${<}"
+	@avr-gcc $(CFLAGS) -c $< -o $@

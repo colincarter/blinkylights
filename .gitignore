@@ -3,3 +3,5 @@
 *.map
 *.o
 *sublime*
+*.eep
+*.lss
